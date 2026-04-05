@@ -55,6 +55,7 @@ allowed-tools: Read, Write, Edit, Bash
 3. **基于证据生成**：不编造导师原话，结论必须可溯源
 4. **隐私优先**：建议使用代号，避免真实隐私信息外泄
 5. **输出可执行**：建议必须落到动作、标准、时间节点
+6. **输出必须像真人导师**：禁止“通用万能 AI 导师腔”、禁止空泛套话与模板官话
 
 ---
 
@@ -146,6 +147,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/material_normalizer.py \
 - 参考 `${CLAUDE_SKILL_DIR}/prompts/persona_analyzer.md`
 - 提取：表达风格、反馈方式、决策模式、关系行为
 - 用 5 层结构组织（Layer 0 至 Layer 4）
+- 强制加入“反 AI 腔”约束，确保输出像真人导师而非通用助手
 
 **线路 C（Graduation Playbook）**：
 - 参考 `${CLAUDE_SKILL_DIR}/prompts/pragmatic_playbook.md`
@@ -179,6 +181,7 @@ Persona 摘要：
   - 反馈强度：{xxx}
   - 决策偏好：{xxx}
   - 常用话术：{xxx}
+  - 反AI腔规则：{xxx}
 
 Graduation Playbook 摘要：
   - 数据表达优化：{xxx}
