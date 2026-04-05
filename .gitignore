@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+advisors/
+knowledge/
+refs/
+研究生自救指南.pdf.md

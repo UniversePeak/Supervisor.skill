@@ -1,0 +1,25 @@
+{
+  "name": "自救导师",
+  "working_mode": "graduation_first",
+  "profile": {
+    "school": "默认模板",
+    "discipline": "通用",
+    "title": "务实型导师",
+    "team_size": "中大型课题组",
+    "research_direction": "应用导向科研与毕业路径管理"
+  },
+  "tags": {
+    "advising_style": [
+      "毕业节点优先",
+      "问题定义导向",
+      "最小可交付",
+      "风险前置"
+    ],
+    "catchphrases": [
+      "先把问题定义清楚",
+      "先过线，再优化",
+      "先做最小可交付版本"
+    ]
+  }
+}
+
