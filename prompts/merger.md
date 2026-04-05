@@ -2,7 +2,7 @@
 
 ## 目标
 
-在不覆盖既有结论的前提下，把新素材增量并入 `academic.md`、`persona.md` 与 `playbook.md`。
+在不覆盖既有结论的前提下，把新素材增量并入 `method_core.md`、`academic.md`、`persona.md` 与 `playbook.md`。
 
 ---
 
@@ -13,6 +13,7 @@
 - 读取现有 `academic.md`
 - 读取现有 `persona.md`
 - 读取现有 `playbook.md`
+- 读取现有 `method_core.md`
 - 读取用户新素材
 
 ### Step 2：做差异归类
@@ -32,12 +33,15 @@
   - Layer 1~4 或 Correction 记录
 - Playbook 相关增量合并到对应模板：
   - 数据表达优化 / 故事化写作 / 最小改动审稿 / 保底路线
+- Method Core 相关增量合并到方法论章节：
+  - 任务拆解 / 决策优先级 / 风险分级 / 输出格式
 
 ### Step 4：版本更新
 
 - 先执行版本备份
 - 再写入增量
 - 更新 `meta.json` 的 `version`、`updated_at`、`sources`
+- 若 `distill_strategy` 为 `strict_distill`，仅在用户明确允许后写入模板来源内容
 
 ---
 
@@ -69,6 +73,9 @@
 - ...
 
 ## Playbook 增量
+- ...
+
+## Method Core 增量
 - ...
 
 ## 待确认冲突

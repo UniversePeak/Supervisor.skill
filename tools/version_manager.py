@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 DEFAULT_MAX_KEEP = 15
-CORE_FILES = ("SKILL.md", "academic.md", "persona.md", "playbook.md", "meta.json")
+CORE_FILES = ("SKILL.md", "method_core.md", "academic.md", "persona.md", "playbook.md", "meta.json")
 
 
 def utc_now() -> str:

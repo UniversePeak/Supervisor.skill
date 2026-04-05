@@ -1,6 +1,6 @@
 ---
 name: create-supervisor
-description: "Distill a graduate advisor into an AI Skill. Import comments, meeting notes, chat logs, and docs to generate Academic Style + Persona + Graduation Playbook, with explicit mode switch (academic_ideal / graduation_first) and continuous evolution. Use for /create-supervisor, 创建导师 skill, 蒸馏导师, /update-supervisor, /list-supervisors. | 把研究生导师蒸馏成 AI Skill，导入批注/组会/聊天，生成 Academic Style + Persona + Graduation Playbook，支持学术理想型/毕业优先型显式切换。"
+description: "Distill a graduate advisor into an AI Skill. Import comments, meeting notes, chat logs, and docs to generate Method Core + Academic Style + Persona + Graduation Playbook, with explicit mode switch and distill strategy switch (strict/hybrid/template-first). Use for /create-supervisor, /update-supervisor, /list-supervisors."
 argument-hint: "[advisor-name-or-slug]"
 version: "1.1.0"
 user-invocable: true
@@ -58,23 +58,29 @@ allowed-tools: Read, Write, Edit, Bash
 
 ---
 
-## 主流程：创建新导师 Skill（含模式开关）
+## 主流程：创建新导师 Skill（含模式 + 策略开关）
 
-### Step 1：基础信息录入（模式 + 3 个问题）
+### Step 1：基础信息录入（模式 + 策略 + 3 个问题）
 
-参考 `${CLAUDE_SKILL_DIR}/prompts/intake.md`，先问模式再问 3 个问题：
+参考 `${CLAUDE_SKILL_DIR}/prompts/intake.md`，先问模式与策略，再问基础问题：
 
 0. **务实模式开关（必选）**
    - `academic_ideal`（学术理想型）
    - `graduation_first`（毕业优先型，含合理裁缝）
+0.5 **蒸馏策略（必选）**
+   - `strict_distill`：纯素材蒸馏
+   - `hybrid_distill`：素材 + 预蒸馏方法论（推荐）
+   - `template_first`：模板优先（素材不足时）
 1. **导师代号**（必填）
 2. **基本信息**（院校、学科、职称、团队规模、研究方向）
 3. **指导风格**（标签 + 口头禅 + 你对 ta 的印象）
+4. **素材充分度评分**（0-100，用户自评或系统估算）
 
 除代号外均可跳过。收集完后先汇总确认，再进入下一步。
 
 如果用户说“用默认导师”，优先加载默认蒸馏模板：
 - `${CLAUDE_SKILL_DIR}/defaults/default_advisor_meta.json`
+- `${CLAUDE_SKILL_DIR}/defaults/default_method_core.md`
 - `${CLAUDE_SKILL_DIR}/defaults/default_advisor_academic.md`
 - `${CLAUDE_SKILL_DIR}/defaults/default_advisor_persona.md`
 - `${CLAUDE_SKILL_DIR}/defaults/default_advisor_playbook.md`
@@ -123,9 +129,14 @@ python3 ${CLAUDE_SKILL_DIR}/tools/material_normalizer.py \
 
 如果用户说“没有素材”或“跳过”，仅凭 Step 1 信息生成基础版。
 
-### Step 3：分析原材料（三轨）
+### Step 3：分析原材料（四轨）
 
-将收集到的素材与基础信息汇总，按以下三条线分析：
+将收集到的素材与基础信息汇总，按以下四条线分析：
+
+**线路 0（Method Core）**：
+- 参考 `${CLAUDE_SKILL_DIR}/prompts/method_core_builder.md`
+- 生成通用方法论层：任务拆解、优先级、风险分级、兜底策略
+- 根据 `distill_strategy` 决定模板注入强度
 
 **线路 A（Academic Style）**：
 - 参考 `${CLAUDE_SKILL_DIR}/prompts/academic_analyzer.md`
@@ -143,6 +154,7 @@ python3 ${CLAUDE_SKILL_DIR}/tools/material_normalizer.py \
 
 ### Step 4：生成并预览
 
+参考 `${CLAUDE_SKILL_DIR}/prompts/method_core_builder.md` 生成 `method_core.md`。  
 参考 `${CLAUDE_SKILL_DIR}/prompts/academic_builder.md` 生成 `academic.md`。  
 参考 `${CLAUDE_SKILL_DIR}/prompts/persona_builder.md` 生成 `persona.md`。  
 参考 `${CLAUDE_SKILL_DIR}/prompts/pragmatic_playbook.md` 生成 `playbook.md`。
@@ -150,6 +162,12 @@ python3 ${CLAUDE_SKILL_DIR}/tools/material_normalizer.py \
 向用户展示摘要（各 5-8 行），询问：
 
 ```
+Method Core 摘要：
+  - 任务拆解：{xxx}
+  - 优先级规则：{xxx}
+  - 风险分级：{xxx}
+  - 兜底策略：{xxx}
+
 Academic Style 摘要：
   - 选题策略：{xxx}
   - 实验标准：{xxx}
@@ -168,6 +186,7 @@ Graduation Playbook 摘要：
   - 最小改动审稿：{xxx}
 
 工作模式：{academic_ideal|graduation_first}
+蒸馏策略：{strict_distill|hybrid_distill|template_first}
 
 确认生成？还是需要调整？
 ```
@@ -183,16 +202,19 @@ mkdir -p advisors/{slug}/versions
 mkdir -p advisors/{slug}/materials
 ```
 
-**2. 写入 academic.md**（Write）：
+**2. 写入 method_core.md**（Write）：
+- 路径：`advisors/{slug}/method_core.md`
+
+**3. 写入 academic.md**（Write）：
 - 路径：`advisors/{slug}/academic.md`
 
-**3. 写入 persona.md**（Write）：
+**4. 写入 persona.md**（Write）：
 - 路径：`advisors/{slug}/persona.md`
 
-**4. 写入 playbook.md**（Write）：
+**5. 写入 playbook.md**（Write）：
 - 路径：`advisors/{slug}/playbook.md`
 
-**5. 写入 meta.json**（Write）：
+**6. 写入 meta.json**（Write）：
 - 路径：`advisors/{slug}/meta.json`
 - 建议结构：
 
@@ -201,6 +223,9 @@ mkdir -p advisors/{slug}/materials
   "name": "{name}",
   "slug": "{slug}",
   "working_mode": "{academic_ideal|graduation_first}",
+  "distill_strategy": "{strict_distill|hybrid_distill|template_first}",
+  "use_template_methodology": true,
+  "material_sufficiency_score": 60,
   "created_at": "{ISO时间}",
   "updated_at": "{ISO时间}",
   "version": "v1",
@@ -220,7 +245,7 @@ mkdir -p advisors/{slug}/materials
 }
 ```
 
-**6. 生成完整 SKILL.md**（Write）：
+**7. 生成完整 SKILL.md**（Write）：
 - 路径：`advisors/{slug}/SKILL.md`
 
 SKILL.md 结构：
@@ -236,6 +261,12 @@ user-invocable: true
 # {name}
 
 {school} {discipline} {title}
+
+---
+
+## PART 0：Method Core
+
+{method_core.md 全部内容}
 
 ---
 
@@ -259,11 +290,12 @@ user-invocable: true
 
 ## 运行规则
 
-1. 先由 PART B 判断沟通策略（态度、语气、边界）
-2. 再由 PART A 给出可执行指导（动作、标准、时间）
-3. 按 working_mode 决定优先级（理想型/毕业优先型）
-4. 输出保持 PART B 表达风格
-5. Layer 0 规则优先级最高，任何情况下不得违背
+1. 先由 PART 0 给出方法论框架（拆解、优先级、风险）
+2. 再由 PART B 判断沟通策略（态度、语气、边界）
+3. 再由 PART A 给出可执行指导（动作、标准、时间）
+4. 按 working_mode + distill_strategy 决定优先级
+5. 输出保持 PART B 表达风格
+6. Layer 0 规则优先级最高，任何情况下不得违背
 ```
 
 告知用户：
@@ -291,7 +323,7 @@ user-invocable: true
 用户提供新素材时：
 
 1. 按 Step 2 方式读取新内容
-2. 用 `Read` 读取现有 `advisors/{slug}/academic.md`、`persona.md` 与 `playbook.md`
+2. 用 `Read` 读取现有 `advisors/{slug}/method_core.md`、`academic.md`、`persona.md` 与 `playbook.md`
 3. 参考 `${CLAUDE_SKILL_DIR}/prompts/merger.md` 分析增量
 4. 备份当前版本：
    ```bash
@@ -308,7 +340,7 @@ user-invocable: true
 用户表达“这不对/他不会这样”时：
 
 1. 参考 `${CLAUDE_SKILL_DIR}/prompts/correction_handler.md` 抽取纠正内容
-2. 判断属于 Academic（规则/流程）、Persona（语气/行为）或 Playbook（场景模板）
+2. 判断属于 Method Core（方法论）、Academic（规则/流程）、Persona（语气/行为）或 Playbook（场景模板）
 3. 生成 correction 记录
 4. 追加到对应文件的 `## Correction 记录`
 5. 同步更新 `meta.json.corrections_count`

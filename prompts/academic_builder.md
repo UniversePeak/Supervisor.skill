@@ -2,7 +2,8 @@
 
 ## 任务
 
-根据 `academic_analyzer.md` 的结果，生成可执行的 `academic.md`，作为导师 Skill 的 Part A。
+根据 `academic_analyzer.md` 的结果，生成可执行的 `academic.md`，作为导师 Skill 的 Part A。  
+若 `use_template_methodology=true`，需与 `default_method_core.md` 保持一致，不冲突。
 
 ---
 
@@ -125,3 +126,4 @@
 1. 所有条目都应可执行，可用于打分或检查
 2. 不足信息用 `[待补充]`，不要臆测
 3. 关键规则优先简短、强约束表达
+4. 对每条关键规则标注来源：`[source=user|template|merged]`

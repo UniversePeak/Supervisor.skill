@@ -34,6 +34,12 @@ user-invocable: true
 
 ---
 
+## PART 0：Method Core（预蒸馏方法论）
+
+{method_core_content}
+
+---
+
 ## PART A：Academic Style
 
 {academic_content}
@@ -54,11 +60,18 @@ user-invocable: true
 
 ## 运行规则
 
-1. 先由 PART B 判断沟通策略（语气、力度、边界）
-2. 再由 PART A 给出可执行指导（动作、标准、时间点）
-3. 按当前模式 `{mode_label}` 进行策略优先级排序
-4. 遇到学术伦理风险时，优先执行拒绝 + 替代方案
-5. Layer 0 规则优先级最高，不得违背
+1. 先由 PART 0 给出通用方法论框架（任务拆解、优先级、风险分级）
+2. 再由 PART B 判断沟通策略（语气、力度、边界）
+3. 由 PART A 给出可执行指导（动作、标准、时间点）
+4. 按当前模式 `{mode_label}` 进行策略优先级排序
+5. 遇到学术伦理风险时，优先执行拒绝 + 替代方案
+6. Layer 0 规则优先级最高，不得违背
+
+## 蒸馏策略
+
+- 当前策略：`{distill_strategy}`
+- 模板方法论：`{use_template_methodology}`
+- 素材充分度：`{material_sufficiency_score}`
 
 ## 模式切换
 
@@ -77,6 +90,29 @@ MODE_LABELS = {
     "academic_ideal": "学术理想型",
     "graduation_first": "毕业优先型（含合理裁缝）",
 }
+
+DISTILL_STRATEGIES = {
+    "strict_distill": "strict_distill（纯素材蒸馏）",
+    "hybrid_distill": "hybrid_distill（素材+预蒸馏模板）",
+    "template_first": "template_first（模板优先）",
+}
+
+DEFAULT_METHOD_CORE = """# Method Core（预蒸馏方法论）
+
+## 目标
+- 在红线内最大化毕业可交付，最小化单点失败风险。
+
+## 通用流程
+1. 定义问题：目标、约束、验收标准
+2. 任务拆解：必须做 / 可选做 / 放弃项
+3. 风险分级：高/中/低并匹配兜底方案
+4. 周期复盘：每周评估偏差并调整
+
+## 输出格式
+- 本周三步
+- 每步验收标准
+- 风险与备选路径
+"""
 
 
 DEFAULT_PLAYBOOK = """# Graduation Playbook
@@ -145,24 +181,48 @@ def normalize_mode(mode: Optional[str]) -> str:
     return "academic_ideal"
 
 
+def normalize_distill_strategy(strategy: Optional[str]) -> str:
+    if strategy in DISTILL_STRATEGIES:
+        return strategy
+    return "hybrid_distill"
+
+
+def normalize_material_score(score: Optional[str]) -> str:
+    try:
+        value = int(str(score))
+    except Exception:
+        value = 60
+    value = max(0, min(100, value))
+    return str(value)
+
+
 def create_skill(
     base_dir: Path,
     slug: str,
     meta: dict,
+    method_core_content: Optional[str],
     academic_content: str,
     persona_content: str,
     playbook_content: Optional[str] = None,
     working_mode: str = "academic_ideal",
+    distill_strategy: str = "hybrid_distill",
+    use_template_methodology: bool = True,
+    material_sufficiency_score: str = "60",
 ) -> Path:
     skill_dir = base_dir / slug
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "versions").mkdir(exist_ok=True)
     (skill_dir / "materials").mkdir(exist_ok=True)
 
+    if not method_core_content:
+        method_core_content = DEFAULT_METHOD_CORE
+    (skill_dir / "method_core.md").write_text(method_core_content, encoding="utf-8")
     (skill_dir / "academic.md").write_text(academic_content, encoding="utf-8")
     (skill_dir / "persona.md").write_text(persona_content, encoding="utf-8")
     mode = normalize_mode(working_mode)
     mode_label = MODE_LABELS[mode]
+    distill_strategy = normalize_distill_strategy(distill_strategy)
+    score = normalize_material_score(material_sufficiency_score)
     if not playbook_content:
         playbook_content = DEFAULT_PLAYBOOK.format(mode_label=mode_label)
     (skill_dir / "playbook.md").write_text(playbook_content, encoding="utf-8")
@@ -173,10 +233,14 @@ def create_skill(
         slug=slug,
         name=name,
         identity=identity,
+        method_core_content=method_core_content,
         academic_content=academic_content,
         persona_content=persona_content,
         playbook_content=playbook_content,
         mode_label=mode_label,
+        distill_strategy=DISTILL_STRATEGIES[distill_strategy],
+        use_template_methodology="enabled" if use_template_methodology else "disabled",
+        material_sufficiency_score=score,
     )
     (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
 
@@ -188,6 +252,9 @@ def create_skill(
     meta.setdefault("sources", [])
     meta.setdefault("corrections_count", 0)
     meta["working_mode"] = mode
+    meta["distill_strategy"] = distill_strategy
+    meta["use_template_methodology"] = bool(use_template_methodology)
+    meta["material_sufficiency_score"] = int(score)
     meta.setdefault("created_at", now_iso())
     meta["updated_at"] = now_iso()
     meta["version"] = "v1"
@@ -216,7 +283,7 @@ def _backup_current(skill_dir: Path, version: str) -> Path:
         backup_dir = versions_dir / f"{version}_{ts}"
     backup_dir.mkdir(parents=True, exist_ok=True)
 
-    for filename in ("SKILL.md", "academic.md", "persona.md", "playbook.md", "meta.json"):
+    for filename in ("SKILL.md", "method_core.md", "academic.md", "persona.md", "playbook.md", "meta.json"):
         src = skill_dir / filename
         if src.exists():
             shutil.copy2(src, backup_dir / filename)
@@ -225,10 +292,14 @@ def _backup_current(skill_dir: Path, version: str) -> Path:
 
 def update_skill(
     skill_dir: Path,
+    method_core_patch: Optional[str] = None,
     academic_patch: Optional[str] = None,
     persona_patch: Optional[str] = None,
     playbook_patch: Optional[str] = None,
     working_mode: Optional[str] = None,
+    distill_strategy: Optional[str] = None,
+    use_template_methodology: Optional[bool] = None,
+    material_sufficiency_score: Optional[str] = None,
     correction_target: Optional[str] = None,
     correction_line: Optional[str] = None,
 ) -> str:
@@ -239,6 +310,11 @@ def update_skill(
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     current_version = meta.get("version", "v1")
     _backup_current(skill_dir, current_version)
+
+    if method_core_patch:
+        method_core_path = skill_dir / "method_core.md"
+        old = method_core_path.read_text(encoding="utf-8") if method_core_path.exists() else ""
+        method_core_path.write_text(old.rstrip() + "\n\n" + method_core_patch.strip() + "\n", encoding="utf-8")
 
     if academic_patch:
         academic_path = skill_dir / "academic.md"
@@ -256,7 +332,12 @@ def update_skill(
         playbook_path.write_text(old.rstrip() + "\n\n" + playbook_patch.strip() + "\n", encoding="utf-8")
 
     if correction_target and correction_line:
-        target_map = {"academic": "academic.md", "persona": "persona.md", "playbook": "playbook.md"}
+        target_map = {
+            "method_core": "method_core.md",
+            "academic": "academic.md",
+            "persona": "persona.md",
+            "playbook": "playbook.md",
+        }
         target_path = skill_dir / target_map.get(correction_target, "persona.md")
         old = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
         section = "## Correction 记录"
@@ -268,7 +349,19 @@ def update_skill(
 
     if working_mode:
         meta["working_mode"] = normalize_mode(working_mode)
+    if distill_strategy:
+        meta["distill_strategy"] = normalize_distill_strategy(distill_strategy)
+    if use_template_methodology is not None:
+        meta["use_template_methodology"] = bool(use_template_methodology)
+    if material_sufficiency_score is not None:
+        meta["material_sufficiency_score"] = int(normalize_material_score(material_sufficiency_score))
 
+    method_core_path = skill_dir / "method_core.md"
+    method_core_content = (
+        method_core_path.read_text(encoding="utf-8")
+        if method_core_path.exists()
+        else DEFAULT_METHOD_CORE
+    )
     academic_content = (skill_dir / "academic.md").read_text(encoding="utf-8")
     persona_content = (skill_dir / "persona.md").read_text(encoding="utf-8")
     playbook_path = skill_dir / "playbook.md"
@@ -284,10 +377,17 @@ def update_skill(
         slug=meta.get("slug", skill_dir.name),
         name=meta.get("name", skill_dir.name),
         identity=identity,
+        method_core_content=method_core_content,
         academic_content=academic_content,
         persona_content=persona_content,
         playbook_content=playbook_content,
         mode_label=mode_label,
+        distill_strategy=DISTILL_STRATEGIES.get(
+            normalize_distill_strategy(meta.get("distill_strategy")),
+            DISTILL_STRATEGIES["hybrid_distill"],
+        ),
+        use_template_methodology="enabled" if bool(meta.get("use_template_methodology", True)) else "disabled",
+        material_sufficiency_score=normalize_material_score(meta.get("material_sufficiency_score", 60)),
     )
     (skill_dir / "SKILL.md").write_text(regenerated, encoding="utf-8")
 
@@ -322,6 +422,11 @@ def list_supervisors(base_dir: Path) -> list[dict]:
                 "corrections_count": meta.get("corrections_count", 0),
                 "identity": build_identity(meta),
                 "working_mode": MODE_LABELS.get(meta.get("working_mode", "academic_ideal"), "学术理想型"),
+                "distill_strategy": DISTILL_STRATEGIES.get(
+                    normalize_distill_strategy(meta.get("distill_strategy")),
+                    DISTILL_STRATEGIES["hybrid_distill"],
+                ),
+                "material_sufficiency_score": int(normalize_material_score(meta.get("material_sufficiency_score", 60))),
             }
         )
     return result
@@ -355,12 +460,21 @@ def main() -> None:
 
     parser.add_argument("--academic", help="academic.md 内容文件路径")
     parser.add_argument("--persona", help="persona.md 内容文件路径")
+    parser.add_argument("--method-core", help="method_core.md 内容文件路径")
     parser.add_argument("--academic-patch", help="academic 增量文件路径")
     parser.add_argument("--persona-patch", help="persona 增量文件路径")
+    parser.add_argument("--method-core-patch", help="method_core 增量文件路径")
     parser.add_argument("--mode", choices=["academic_ideal", "graduation_first"], help="工作模式")
+    parser.add_argument(
+        "--distill-strategy",
+        choices=["strict_distill", "hybrid_distill", "template_first"],
+        help="蒸馏策略",
+    )
+    parser.add_argument("--use-template-methodology", choices=["true", "false"], help="是否启用预蒸馏方法论")
+    parser.add_argument("--material-score", help="素材充分度评分 0-100")
     parser.add_argument("--playbook", help="playbook.md 内容文件路径")
     parser.add_argument("--playbook-patch", help="playbook 增量文件路径")
-    parser.add_argument("--correction-target", choices=["academic", "persona", "playbook"])
+    parser.add_argument("--correction-target", choices=["method_core", "academic", "persona", "playbook"])
     parser.add_argument("--correction-line", help="纠偏记录行")
 
     args = parser.parse_args()
@@ -376,7 +490,11 @@ def main() -> None:
             updated = row["updated_at"][:19] if row["updated_at"] else "未知"
             print(f"  [{row['slug']}] {row['name']}")
             print(f"    {row['identity']}")
-            print(f"    模式: {row['working_mode']}  版本: {row['version']}  纠偏: {row['corrections_count']}  更新: {updated}")
+            print(
+                f"    模式: {row['working_mode']}  策略: {row['distill_strategy']}  "
+                f"素材分: {row['material_sufficiency_score']}  版本: {row['version']}  "
+                f"纠偏: {row['corrections_count']}  更新: {updated}"
+            )
             print()
         return
 
@@ -392,23 +510,35 @@ def main() -> None:
             meta["name"] = args.name
 
         slug = args.slug or slugify(meta.get("name", "advisor"))
+        method_core_content = read_optional_file(args.method_core)
         academic_content = read_optional_file(args.academic) or "# Academic Style\n\n[待补充]"
         persona_content = read_optional_file(args.persona) or "# Persona\n\n[待补充]"
         playbook_content = read_optional_file(args.playbook)
         working_mode = normalize_mode(args.mode or meta.get("working_mode"))
+        distill_strategy = normalize_distill_strategy(args.distill_strategy or meta.get("distill_strategy"))
+        if args.use_template_methodology is not None:
+            use_template_methodology = args.use_template_methodology == "true"
+        else:
+            use_template_methodology = bool(meta.get("use_template_methodology", True))
+        material_score = normalize_material_score(args.material_score or meta.get("material_sufficiency_score", 60))
 
         skill_dir = create_skill(
             base_dir,
             slug,
             meta,
+            method_core_content,
             academic_content,
             persona_content,
             playbook_content=playbook_content,
             working_mode=working_mode,
+            distill_strategy=distill_strategy,
+            use_template_methodology=use_template_methodology,
+            material_sufficiency_score=material_score,
         )
         print(f"OK: 导师 Skill 已创建：{skill_dir}")
         print(f"   触发命令：/{slug}")
         print(f"   默认模式：{MODE_LABELS[working_mode]}")
+        print(f"   蒸馏策略：{DISTILL_STRATEGIES[distill_strategy]}")
         return
 
     if args.action == "update":
@@ -420,15 +550,20 @@ def main() -> None:
             print(f"错误：未找到目录 {skill_dir}", file=sys.stderr)
             sys.exit(1)
 
+        method_core_patch = read_optional_file(args.method_core_patch)
         academic_patch = read_optional_file(args.academic_patch)
         persona_patch = read_optional_file(args.persona_patch)
         playbook_patch = read_optional_file(args.playbook_patch)
         new_version = update_skill(
             skill_dir=skill_dir,
+            method_core_patch=method_core_patch,
             academic_patch=academic_patch,
             persona_patch=persona_patch,
             playbook_patch=playbook_patch,
             working_mode=args.mode,
+            distill_strategy=args.distill_strategy,
+            use_template_methodology=(None if args.use_template_methodology is None else args.use_template_methodology == "true"),
+            material_sufficiency_score=args.material_score,
             correction_target=args.correction_target,
             correction_line=args.correction_line,
         )

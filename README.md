@@ -15,21 +15,11 @@
 
 一句话描述导师 + 一批原材料（批注/组会/聊天/邮件）<br>
 生成一个可持续进化的导师 Skill：<br>
-**Academic Style + Persona + Graduation Playbook**
+**Method Core + Academic Style + Persona + Graduation Playbook**
 
 [功能特性](#功能特性) · [安装](#安装) · [使用](#使用) · [效果示例](#效果示例) · [项目结构](#项目结构)
 
 </div>
-
----
-
-### 同系列项目
-
-> - [同事.skill](https://github.com/titanwings/colleague-skill)
-> - [前任.skill](https://github.com/therealXiaomanChu/ex-skill)
-> - [老板.skill](https://github.com/nicepkg/boss-skill)
-> 
-> 让你的导师也赛博永生吧。
 
 ---
 
@@ -45,13 +35,14 @@
 > “合理裁缝”仅指：问题重述、实验组织、叙事优化、优先级取舍。  
 > 不包含：伪造/篡改数据、抄袭、虚构引用、隐瞒关键负结果。
 
-### 2) 三层结构，不止“像导师说话”
+### 2) 四层结构，不止“像导师说话”
 
 | 部分                           | 内容                       | 作用       |
 | ---------------------------- | ------------------------ | -------- |
-| Part A — Academic Style      | 选题标准、实验规范、论文标准、里程碑、伦理红线  | 决定“做什么”  |
-| Part B — Persona             | 语气、反馈方式、决策偏好、关系行为（5 层）   | 决定“怎么说”  |
-| Part C — Graduation Playbook | 数据表达优化、故事化写作、最小改动审稿、保底路线 | 决定“怎么过线” |
+| Part 0 — Method Core         | 任务拆解、优先级、风险分级、兜底策略         | 决定“怎么推进” |
+| Part A — Academic Style      | 选题标准、实验规范、论文标准、里程碑、伦理红线 | 决定“做什么”  |
+| Part B — Persona             | 语气、反馈方式、决策偏好、关系行为（5 层）    | 决定“怎么说”  |
+| Part C — Graduation Playbook | 数据表达优化、故事化写作、最小改动审稿、保底路线  | 决定“怎么过线” |
 
 ### 3) 内置毕业场景模板（红线内）
 
@@ -66,11 +57,22 @@
 - 对话纠偏：一句“他不会这样说”立即修正
 - 版本管理：备份 / 回滚 / 清理
 
-### 5) 默认导师（蒸馏版）
+### 5) 预蒸馏方法论模板
 
-仓库内置了基于某位🐏导蒸馏的默认模板：
+蒸馏时可选三种策略：
+
+- `strict_distill`：仅用用户素材
+- `hybrid_distill`：素材 + 预蒸馏模板（推荐）
+- `template_first`：模板优先（素材不足场景）
+
+适用于：用户素材少、导师方法论弱、时间紧需要先保底。
+
+### 6) 默认导师（蒸馏版）
+
+仓库内置了基于某位能力很强的🐏导蒸馏的默认模板：
 
 - `defaults/default_advisor_meta.json`
+- `defaults/default_method_core.md`
 - `defaults/default_advisor_academic.md`
 - `defaults/default_advisor_persona.md`
 - `defaults/default_advisor_playbook.md`
@@ -126,9 +128,10 @@ pip3 install -r requirements.txt
 按流程完成：
 
 1. 选择工作模式（学术理想型 / 毕业优先型）
-2. 填写导师基础信息
-3. 导入素材
-4. 预览确认并生成
+2. 选择蒸馏策略（strict / hybrid / template-first）
+3. 填写导师基础信息
+4. 导入素材
+5. 预览确认并生成
 
 ### 管理命令
 
@@ -198,6 +201,7 @@ create-supervisor/
 ├── README.md
 ├── defaults/
 │   ├── default_advisor_meta.json
+│   ├── default_method_core.md
 │   ├── default_advisor_academic.md
 │   ├── default_advisor_persona.md
 │   └── default_advisor_playbook.md
@@ -205,6 +209,7 @@ create-supervisor/
 │   ├── intake.md
 │   ├── academic_analyzer.md
 │   ├── persona_analyzer.md
+│   ├── method_core_builder.md
 │   ├── academic_builder.md
 │   ├── persona_builder.md
 │   ├── pragmatic_playbook.md
@@ -226,6 +231,28 @@ create-supervisor/
 - 原材料质量决定还原度：批注和真实反馈 > 主观印象
 - “毕业优先型”不是学术作弊开关，而是项目管理优先级开关
 - 本项目用于学习协作与学术训练，不用于骚扰、隐私侵犯或不当用途
+
+---
+
+## 致敬 & 引用
+
+本项目参考并致敬以下开源工作：
+
+- [同事.skill](https://github.com/titanwings/colleague-skill)
+- [老板.skill](https://github.com/nicepkg/boss-skill)
+- [前任.skill](https://github.com/therealXiaomanChu/ex-skill)
+
+考虑到在真实的学术生态中，导师与学生的交流往往发生于“组会汇报”或“突击电话”等非结构化的语音场景，纯文本语料很难完整捕捉其精神内核。因此，在同系列 Skill 的基础架构上，新增了全新的预蒸馏层。
+
+不止是导师的语气词、标点符号和画饼习惯。通过这一层的增强，我们旨在重塑并强化你导师的学术指导能力。在赛博空间里，你可以选择同时接受现实世界中的“原生导师”与被强化后的“数字孪生导师”的教导——同宗同源，双倍的快乐。（你可以选择关闭）
+
+为此，以下是底层机制：
+
+Part 0 — Method Core（预蒸馏通用方法论层）：越过表层话术，直接提取导师言语背后的底层学术逻辑与生存法则。
+
+灵活的蒸馏策略路由：内置 strict_distill（严格克隆） / hybrid_distill（混合增强） / template_first（模板接管）三大开关，让你能够根据当前的抗压能力自由调节“赛博导师”的干预烈度。
+
+素材评分与“学术扶贫”机制（面向散养/放养场景）：通过语料充分度评分评估蒸馏质量风险。当有效素材不足，或导师方法论信号较弱时，系统会优先建议采用 hybrid_distill / template_first 策略，以注入高质量通用方法模板，补齐数字导师的执行能力。（当然，这并不完美）
 
 ---
 
