@@ -6,10 +6,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://python.org)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
+[![Clients](https://img.shields.io/badge/Claude%20Code%20%7C%20Codex%20%7C%20OpenClaw-compatible-blueviolet)](https://agentskills.io)
 [![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-green)](https://agentskills.io)
 
-**天下硕博苦导师久矣，把导师蒸馏成 AI Skill，让抽象的交流变成你可执行的动作。**
+**天下硕博苦导师久矣，把导师的决策方式蒸馏成有证据边界的 AI Skill，让抽象交流变成可执行动作。**
 
 <br>
 
@@ -51,11 +51,14 @@
 - **最小改动通过审稿**：先改致命项，再改加分项
 - **毕业里程碑保底**：最小可交付 + 兜底方案
 
-### 4) 持续进化
+### 4) 安全、可预览的持续进化
 
-- 追加素材：增量 merge，不覆盖历史结论
-- 对话纠偏：一句“他不会这样说”立即修正
+- 所有导入材料都按“不可信证据”处理，不执行材料中的命令或链接
+- 追加素材：先显示差异、来源、冲突和安全警告，确认后再写入
+- 对话纠偏：只修改用户明确指定的场景，不把一句话扩展成全局人格
 - 版本管理：备份 / 回滚 / 清理
+
+> 生成结果是基于有限材料的顾问模型，不是真实导师本人。安全、学术诚信、官方规则和用户当前目标始终高于 Persona 模仿。
 
 ### 5) 预蒸馏方法论模板
 
@@ -199,6 +202,10 @@ pip3 install -r requirements.txt
 create-supervisor/
 ├── SKILL.md
 ├── README.md
+├── agents/
+│   └── openai.yaml
+├── references/
+│   └── security.md
 ├── defaults/
 │   ├── default_advisor_meta.json
 │   ├── default_method_core.md
@@ -218,7 +225,11 @@ create-supervisor/
 ├── tools/
 │   ├── skill_writer.py
 │   ├── version_manager.py
-│   └── material_normalizer.py
+│   ├── material_normalizer.py
+│   ├── path_safety.py
+│   └── validate_skill.py
+├── tests/
+├── .github/workflows/ci.yml
 ├── requirements.txt
 ├── LICENSE
 └── .gitignore
@@ -229,6 +240,8 @@ create-supervisor/
 ## 注意事项
 
 - 原材料质量决定还原度：批注和真实反馈 > 主观印象
+- 原材料中的指令、链接和权限请求只作为文本分析，不能控制 Agent
+- 默认不把原始聊天、批注和第三方隐私材料发布进生成的 Skill
 - “毕业优先型”不是学术作弊开关，而是项目管理优先级开关
 - 本项目用于学习协作与学术训练，不用于骚扰、隐私侵犯或不当用途
 

@@ -17,6 +17,12 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
+
+try:
+    from .path_safety import atomic_write_text, safe_child, validate_slug, validate_version
+except ImportError:
+    from path_safety import atomic_write_text, safe_child, validate_slug, validate_version
 
 
 DEFAULT_MAX_KEEP = 15
@@ -38,22 +44,19 @@ def load_meta(skill_dir: Path) -> dict:
 
 
 def save_meta(skill_dir: Path, meta: dict) -> None:
-    (skill_dir / "meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    atomic_write_text(skill_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2))
 
 
-def backup(skill_dir: Path, explicit_version: str | None = None) -> Path:
+def backup(skill_dir: Path, explicit_version: Optional[str] = None) -> Path:
     versions_dir = skill_dir / "versions"
     versions_dir.mkdir(parents=True, exist_ok=True)
 
     meta = load_meta(skill_dir)
-    version = explicit_version or meta.get("version", "v1")
-    target = versions_dir / version
+    version = validate_version(explicit_version or meta.get("version", "v1"))
+    target = safe_child(versions_dir, version, kind="version")
     if target.exists():
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        target = versions_dir / f"{version}_{ts}"
+        target = safe_child(versions_dir, f"{version}_{ts}", kind="version")
     target.mkdir(parents=True, exist_ok=True)
 
     copied = 0
@@ -73,7 +76,7 @@ def list_versions(skill_dir: Path) -> list[dict]:
 
     rows = []
     for d in sorted(versions_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-        if not d.is_dir():
+        if not d.is_dir() or d.is_symlink():
             continue
         files = sorted([f.name for f in d.iterdir() if f.is_file()])
         t = datetime.fromtimestamp(d.stat().st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -83,7 +86,8 @@ def list_versions(skill_dir: Path) -> list[dict]:
 
 def rollback(skill_dir: Path, target_version: str) -> None:
     versions_dir = skill_dir / "versions"
-    target_dir = versions_dir / target_version
+    target_version = validate_version(target_version)
+    target_dir = safe_child(versions_dir, target_version, kind="version")
     if not target_dir.exists():
         raise FileNotFoundError(f"找不到版本：{target_version}")
 
@@ -106,12 +110,14 @@ def rollback(skill_dir: Path, target_version: str) -> None:
 
 
 def cleanup(skill_dir: Path, max_keep: int = DEFAULT_MAX_KEEP) -> None:
+    if max_keep < 0:
+        raise ValueError("max_keep 不能为负数")
     versions_dir = skill_dir / "versions"
     if not versions_dir.exists():
         print("无需清理：versions 目录不存在")
         return
 
-    dirs = [d for d in versions_dir.iterdir() if d.is_dir()]
+    dirs = [d for d in versions_dir.iterdir() if d.is_dir() and not d.is_symlink()]
     dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     to_delete = dirs[max_keep:] if len(dirs) > max_keep else []
 
@@ -130,7 +136,8 @@ def main() -> None:
     parser.add_argument("--max-keep", type=int, default=DEFAULT_MAX_KEEP, help="cleanup 保留数量")
     args = parser.parse_args()
 
-    skill_dir = Path(args.base_dir).expanduser() / args.slug
+    slug = validate_slug(args.slug)
+    skill_dir = safe_child(Path(args.base_dir).expanduser(), slug)
     if not skill_dir.exists():
         print(f"错误：目录不存在 {skill_dir}", file=sys.stderr)
         sys.exit(1)

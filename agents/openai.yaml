@@ -1,0 +1,4 @@
+interface:
+  display_name: "创建导师 Skill"
+  short_description: "从导师材料创建可追溯、可安全更新的研究生顾问 Skill"
+  default_prompt: "Use $create-supervisor to build an evidence-bounded advisor Skill from my materials."
