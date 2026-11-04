@@ -68,6 +68,8 @@
 - `hybrid_distill`：素材 + 预蒸馏模板（推荐）
 - `template_first`：模板优先（素材不足场景）
 
+`strict_distill`默认关闭模板方法论。关闭后，未提供的Method Core和Playbook会标为待补充，不自动填入通用模板；已经提供的内容照常保留。只有明确允许使用模板时，才传入`--use-template-methodology true`。`hybrid_distill`和`template_first`默认保留模板，也可以显式关闭。
+
 适用于：用户素材少、导师方法论弱、时间紧需要先保底。
 
 ### 6) 默认导师（蒸馏版）
