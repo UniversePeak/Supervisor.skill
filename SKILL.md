@@ -51,6 +51,8 @@ Read [prompts/intake.md](prompts/intake.md). Collect:
 - distillation strategy: `strict_distill`, `hybrid_distill`, or `template_first`;
 - optional profile, style description, and material coverage estimate.
 
+For `strict_distill`, leave template methodology disabled unless the user explicitly authorizes it. With templates disabled, missing Method Core or Playbook content remains a labeled gap instead of receiving a general template. User-supplied content is preserved under either setting.
+
 Explain that the working lens affects recommendations for the current advisor model, while the distillation strategy only controls how the model is built. Confirm the summary before importing materials.
 
 ### 2. Import materials

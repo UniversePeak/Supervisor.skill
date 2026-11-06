@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.skill_writer import create_skill
+from tools.skill_writer import DEFAULT_METHOD_CORE, DEFAULT_PLAYBOOK, create_skill
 from tools.validate_skill import parse_frontmatter, validate_skill
 
 
@@ -46,6 +46,54 @@ class SkillWriterTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 self.create_sample(Path(temp_dir))
             self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_template_settings_control_missing_content(self):
+        cases = [
+            ("strict_distill", None, False),
+            ("hybrid_distill", None, True),
+            ("template_first", None, True),
+            ("hybrid_distill", False, False),
+            ("strict_distill", True, True),
+        ]
+        for strategy, setting, enabled in cases:
+            with self.subTest(strategy=strategy, setting=setting), tempfile.TemporaryDirectory() as temp_dir:
+                skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                    None, "# Academic\nUser evidence", "# Persona\nUser evidence",
+                    distill_strategy=strategy, use_template_methodology=setting)
+                meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+                self.assertEqual(meta["use_template_methodology"], enabled)
+                method = (skill_dir / "method_core.md").read_text(encoding="utf-8")
+                playbook = (skill_dir / "playbook.md").read_text(encoding="utf-8")
+                if enabled:
+                    self.assertEqual(method, DEFAULT_METHOD_CORE)
+                    self.assertEqual(playbook, DEFAULT_PLAYBOOK.format(mode_label="学术理想型"))
+                else:
+                    self.assertIn("待补充", method)
+                    self.assertIn("待补充", playbook)
+                    self.assertNotIn("预蒸馏方法论", method)
+                    self.assertNotIn("最小必要改动", playbook)
+                validate_skill(skill_dir, require_folder_match=True)
+
+    def test_disabled_templates_preserve_supplied_content(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                "# Method\nConfirmed method", "# Academic", "# Persona",
+                playbook_content="# Playbook\nConfirmed strategy",
+                distill_strategy="strict_distill", use_template_methodology=False)
+            self.assertEqual((skill_dir / "method_core.md").read_text(encoding="utf-8"),
+                             "# Method\nConfirmed method")
+            self.assertEqual((skill_dir / "playbook.md").read_text(encoding="utf-8"),
+                             "# Playbook\nConfirmed strategy")
+
+    def test_cli_strict_distillation_defaults_to_no_templates(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                "--action", "create", "--base-dir", temp_dir, "--slug", "advisor-a",
+                "--distill-strategy", "strict_distill"], check=True, capture_output=True)
+            skill_dir = Path(temp_dir) / "advisor-a"
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertFalse(meta["use_template_methodology"])
+            self.assertIn("待补充", (skill_dir / "method_core.md").read_text(encoding="utf-8"))
 
     def test_dry_run_prints_diff_without_modifying_source(self):
         with tempfile.TemporaryDirectory() as temp_dir:

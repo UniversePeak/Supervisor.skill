@@ -210,10 +210,13 @@ def create_skill(
     playbook_content: Optional[str] = None,
     working_mode: str = "academic_ideal",
     distill_strategy: str = "hybrid_distill",
-    use_template_methodology: bool = True,
+    use_template_methodology: Optional[bool] = None,
     material_sufficiency_score: str = "60",
 ) -> Path:
     slug = validate_slug(slug)
+    distill_strategy = normalize_distill_strategy(distill_strategy)
+    if use_template_methodology is None:
+        use_template_methodology = distill_strategy != "strict_distill"
     base_dir = base_dir.expanduser()
     base_dir.mkdir(parents=True, exist_ok=True)
     skill_dir = safe_child(base_dir, slug)
@@ -224,16 +227,17 @@ def create_skill(
     (skill_dir / "materials").mkdir(exist_ok=True)
 
     if not method_core_content:
-        method_core_content = DEFAULT_METHOD_CORE
+        method_core_content = (DEFAULT_METHOD_CORE if use_template_methodology else
+                               "# Method Core\n\n[待补充：从用户确认的材料中提取方法论。]\n")
     atomic_write_text(skill_dir / "method_core.md", method_core_content)
     atomic_write_text(skill_dir / "academic.md", academic_content)
     atomic_write_text(skill_dir / "persona.md", persona_content)
     mode = normalize_mode(working_mode)
     mode_label = MODE_LABELS[mode]
-    distill_strategy = normalize_distill_strategy(distill_strategy)
     score = normalize_material_score(material_sufficiency_score)
     if not playbook_content:
-        playbook_content = DEFAULT_PLAYBOOK.format(mode_label=mode_label)
+        playbook_content = (DEFAULT_PLAYBOOK.format(mode_label=mode_label) if use_template_methodology else
+                            "# Graduation Playbook\n\n[待补充：从用户确认的材料中提取适用策略。]\n")
     atomic_write_text(skill_dir / "playbook.md", playbook_content)
 
     name = meta.get("name", slug)
@@ -559,7 +563,7 @@ def main() -> None:
         if args.use_template_methodology is not None:
             use_template_methodology = args.use_template_methodology == "true"
         else:
-            use_template_methodology = bool(meta.get("use_template_methodology", True))
+            use_template_methodology = meta.get("use_template_methodology")
         material_score = normalize_material_score(args.material_score or meta.get("material_sufficiency_score", 60))
 
         skill_dir = create_skill(
