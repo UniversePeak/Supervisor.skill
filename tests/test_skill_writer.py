@@ -5,7 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.skill_writer import DEFAULT_METHOD_CORE, DEFAULT_PLAYBOOK, create_skill
+from tools.path_safety import atomic_write_text
+from tools.skill_writer import (
+    DEFAULT_METHOD_CORE,
+    DEFAULT_PLAYBOOK,
+    PLACEHOLDER_METHOD_CORE,
+    PLACEHOLDER_PLAYBOOK,
+    create_skill,
+    update_skill,
+)
 from tools.validate_skill import parse_frontmatter, validate_skill
 
 
@@ -95,6 +103,101 @@ class SkillWriterTests(unittest.TestCase):
             self.assertFalse(meta["use_template_methodology"])
             self.assertIn("待补充", (skill_dir / "method_core.md").read_text(encoding="utf-8"))
 
+    def test_update_strict_distillation_removes_untouched_defaults(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            meta_path = skill_dir / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["distill_strategy"] = "hybrid_distill"
+            meta["use_template_methodology"] = True
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            atomic_write_text(skill_dir / "method_core.md", DEFAULT_METHOD_CORE)
+            atomic_write_text(skill_dir / "playbook.md", DEFAULT_PLAYBOOK.format(mode_label="学术理想型"))
+
+            version = update_skill(skill_dir, distill_strategy="strict_distill")
+
+            updated = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(version, "v2")
+            self.assertEqual(updated["distill_strategy"], "strict_distill")
+            self.assertFalse(updated["use_template_methodology"])
+            self.assertIn("待补充", (skill_dir / "method_core.md").read_text(encoding="utf-8"))
+            self.assertIn("待补充", (skill_dir / "playbook.md").read_text(encoding="utf-8"))
+            skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("strict_distill", skill_text)
+            self.assertIn("`disabled`", skill_text)
+            validate_skill(skill_dir, require_folder_match=True)
+
+    def test_update_strict_distillation_preserves_edited_method(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            meta_path = skill_dir / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["distill_strategy"] = "hybrid_distill"
+            meta["use_template_methodology"] = True
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            atomic_write_text(skill_dir / "method_core.md", "# Method\n\nUser confirmed method")
+
+            update_skill(skill_dir, distill_strategy="strict_distill")
+
+            updated = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertFalse(updated["use_template_methodology"])
+            self.assertEqual((skill_dir / "method_core.md").read_text(encoding="utf-8"),
+                             "# Method\n\nUser confirmed method")
+
+    def test_update_to_hybrid_fills_untouched_placeholders(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                None, "# Academic", "# Persona", distill_strategy="strict_distill")
+            meta_path = skill_dir / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertFalse(meta["use_template_methodology"])
+            self.assertIn("待补充", (skill_dir / "method_core.md").read_text(encoding="utf-8"))
+
+            update_skill(skill_dir, distill_strategy="hybrid_distill")
+
+            updated = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertTrue(updated["use_template_methodology"])
+            self.assertEqual((skill_dir / "method_core.md").read_text(encoding="utf-8"),
+                             DEFAULT_METHOD_CORE)
+            self.assertEqual((skill_dir / "playbook.md").read_text(encoding="utf-8"),
+                             DEFAULT_PLAYBOOK.format(mode_label="学术理想型"))
+            self.assertIn("`enabled`", (skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+
+    def test_explicit_template_setting_overrides_strategy_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            meta_path = skill_dir / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["distill_strategy"] = "hybrid_distill"
+            meta["use_template_methodology"] = True
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+            update_skill(skill_dir, distill_strategy="strict_distill",
+                         use_template_methodology=True)
+
+            updated = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(updated["distill_strategy"], "strict_distill")
+            self.assertTrue(updated["use_template_methodology"])
+            self.assertIn("`enabled`", (skill_dir / "SKILL.md").read_text(encoding="utf-8"))
+
+    def test_same_strategy_preserves_explicit_template_optout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            meta_path = skill_dir / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["distill_strategy"] = "hybrid_distill"
+            meta["use_template_methodology"] = False
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            atomic_write_text(skill_dir / "method_core.md", PLACEHOLDER_METHOD_CORE)
+            atomic_write_text(skill_dir / "playbook.md", PLACEHOLDER_PLAYBOOK)
+
+            update_skill(skill_dir, distill_strategy="hybrid_distill")
+
+            updated = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertFalse(updated["use_template_methodology"])
+            self.assertEqual((skill_dir / "method_core.md").read_text(encoding="utf-8"),
+                             PLACEHOLDER_METHOD_CORE)
+
     def test_dry_run_prints_diff_without_modifying_source(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             base_dir = Path(temp_dir) / "advisors"
@@ -119,6 +222,8 @@ class SkillWriterTests(unittest.TestCase):
                     "advisor-a",
                     "--academic-patch",
                     str(patch),
+                    "--distill-strategy",
+                    "strict_distill",
                     "--dry-run",
                 ],
                 check=True,
@@ -135,6 +240,8 @@ class SkillWriterTests(unittest.TestCase):
             self.assertEqual(before, after)
             self.assertIn("DRY RUN", result.stdout)
             self.assertIn("evidence-bound", result.stdout)
+            self.assertIn("`disabled`", result.stdout)
+            self.assertEqual(list((skill_dir / "versions").iterdir()), [])
 
 
 if __name__ == "__main__":

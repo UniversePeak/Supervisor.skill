@@ -132,6 +132,14 @@ DEFAULT_PLAYBOOK = """# Graduation Playbook
 """
 
 
+PLACEHOLDER_METHOD_CORE = "# Method Core\n\n[待补充：从用户确认的材料中提取方法论。]\n"
+PLACEHOLDER_PLAYBOOK = "# Graduation Playbook\n\n[待补充：从用户确认的材料中提取适用策略。]\n"
+
+
+def _is_template_playbook(content: str) -> bool:
+    return any(content == DEFAULT_PLAYBOOK.format(mode_label=label) for label in MODE_LABELS.values())
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -228,7 +236,7 @@ def create_skill(
 
     if not method_core_content:
         method_core_content = (DEFAULT_METHOD_CORE if use_template_methodology else
-                               "# Method Core\n\n[待补充：从用户确认的材料中提取方法论。]\n")
+                               PLACEHOLDER_METHOD_CORE)
     atomic_write_text(skill_dir / "method_core.md", method_core_content)
     atomic_write_text(skill_dir / "academic.md", academic_content)
     atomic_write_text(skill_dir / "persona.md", persona_content)
@@ -237,7 +245,7 @@ def create_skill(
     score = normalize_material_score(material_sufficiency_score)
     if not playbook_content:
         playbook_content = (DEFAULT_PLAYBOOK.format(mode_label=mode_label) if use_template_methodology else
-                            "# Graduation Playbook\n\n[待补充：从用户确认的材料中提取适用策略。]\n")
+                            PLACEHOLDER_PLAYBOOK)
     atomic_write_text(skill_dir / "playbook.md", playbook_content)
 
     name = meta.get("name", slug)
@@ -323,6 +331,8 @@ def update_skill(
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     current_version = meta.get("version", "v1")
+    previous_strategy = normalize_distill_strategy(meta.get("distill_strategy"))
+    had_template_setting = "use_template_methodology" in meta
     _backup_current(skill_dir, current_version)
 
     if method_core_patch:
@@ -363,10 +373,15 @@ def update_skill(
 
     if working_mode:
         meta["working_mode"] = normalize_mode(working_mode)
+    strategy_changed = False
     if distill_strategy:
-        meta["distill_strategy"] = normalize_distill_strategy(distill_strategy)
+        new_strategy = normalize_distill_strategy(distill_strategy)
+        strategy_changed = new_strategy != previous_strategy
+        meta["distill_strategy"] = new_strategy
     if use_template_methodology is not None:
         meta["use_template_methodology"] = bool(use_template_methodology)
+    elif strategy_changed or not had_template_setting:
+        meta["use_template_methodology"] = normalize_distill_strategy(meta.get("distill_strategy")) != "strict_distill"
     if material_sufficiency_score is not None:
         meta["material_sufficiency_score"] = int(normalize_material_score(material_sufficiency_score))
 
@@ -387,6 +402,26 @@ def update_skill(
         if playbook_path.exists()
         else DEFAULT_PLAYBOOK.format(mode_label=mode_label)
     )
+
+    template_setting_changed = (
+        use_template_methodology is not None or strategy_changed or not had_template_setting
+    )
+    if template_setting_changed:
+        if bool(meta.get("use_template_methodology", True)):
+            if method_core_content == PLACEHOLDER_METHOD_CORE:
+                method_core_content = DEFAULT_METHOD_CORE
+                atomic_write_text(method_core_path, method_core_content)
+            if playbook_content == PLACEHOLDER_PLAYBOOK:
+                playbook_content = DEFAULT_PLAYBOOK.format(mode_label=mode_label)
+                atomic_write_text(playbook_path, playbook_content)
+        else:
+            if method_core_content == DEFAULT_METHOD_CORE:
+                method_core_content = PLACEHOLDER_METHOD_CORE
+                atomic_write_text(method_core_path, method_core_content)
+            if _is_template_playbook(playbook_content):
+                playbook_content = PLACEHOLDER_PLAYBOOK
+                atomic_write_text(playbook_path, playbook_content)
+
     description = (
         f"Provide evidence-bounded graduate advising in the modeled style of {meta.get('name', skill_dir.name)} "
         f"({identity}; {mode_label}). Use for proposals, papers, meetings, rebuttals, "
