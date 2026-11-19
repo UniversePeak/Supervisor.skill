@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # ubuntu-latest no longer offers Python 3.9; keep the declared floor tested here.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
