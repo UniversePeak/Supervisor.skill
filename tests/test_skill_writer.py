@@ -163,6 +163,50 @@ class SkillWriterTests(unittest.TestCase):
                              DEFAULT_PLAYBOOK.format(mode_label="学术理想型"))
             self.assertIn("`enabled`", (skill_dir / "SKILL.md").read_text(encoding="utf-8"))
 
+    def test_mode_change_refreshes_template_playbook(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                None, "# Academic", "# Persona", working_mode="graduation_first")
+            playbook_path = skill_dir / "playbook.md"
+            self.assertIn("毕业优先型", playbook_path.read_text(encoding="utf-8"))
+
+            update_skill(skill_dir, working_mode="academic_ideal")
+
+            playbook = playbook_path.read_text(encoding="utf-8")
+            self.assertIn("学术理想型", playbook)
+            self.assertNotIn("毕业优先型", playbook)
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["working_mode"], "academic_ideal")
+            skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("学术理想型", skill_text)
+            validate_skill(skill_dir, require_folder_match=True)
+
+    def test_mode_change_preserves_edited_playbook(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                None, "# Academic", "# Persona",
+                playbook_content="# Playbook\nConfirmed strategy", working_mode="graduation_first")
+
+            update_skill(skill_dir, working_mode="academic_ideal")
+
+            self.assertEqual((skill_dir / "playbook.md").read_text(encoding="utf-8"),
+                             "# Playbook\nConfirmed strategy")
+
+    def test_update_writes_missing_playbook_with_current_setting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = create_skill(Path(temp_dir), "advisor-a", {"name": "A 导"},
+                None, "# Academic", "# Persona", working_mode="graduation_first")
+            playbook_path = skill_dir / "playbook.md"
+            playbook_path.unlink()
+
+            update_skill(skill_dir, persona_patch="## Style\nDirect")
+            self.assertEqual(playbook_path.read_text(encoding="utf-8"),
+                             DEFAULT_PLAYBOOK.format(mode_label="毕业优先型（含合理裁缝）"))
+
+            playbook_path.unlink()
+            update_skill(skill_dir, distill_strategy="strict_distill")
+            self.assertEqual(playbook_path.read_text(encoding="utf-8"), PLACEHOLDER_PLAYBOOK)
+
     def test_explicit_template_setting_overrides_strategy_default(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             skill_dir = self.create_sample(Path(temp_dir))
