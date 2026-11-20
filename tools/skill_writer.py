@@ -332,6 +332,7 @@ def update_skill(
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     current_version = meta.get("version", "v1")
     previous_strategy = normalize_distill_strategy(meta.get("distill_strategy"))
+    previous_mode = normalize_mode(meta.get("working_mode"))
     had_template_setting = "use_template_methodology" in meta
     _backup_current(skill_dir, current_version)
 
@@ -386,34 +387,42 @@ def update_skill(
         meta["material_sufficiency_score"] = int(normalize_material_score(material_sufficiency_score))
 
     method_core_path = skill_dir / "method_core.md"
-    method_core_content = (
-        method_core_path.read_text(encoding="utf-8")
-        if method_core_path.exists()
-        else DEFAULT_METHOD_CORE
-    )
+    templates_enabled = bool(meta.get("use_template_methodology", True))
+    if method_core_path.exists():
+        method_core_content = method_core_path.read_text(encoding="utf-8")
+    else:
+        method_core_content = DEFAULT_METHOD_CORE if templates_enabled else PLACEHOLDER_METHOD_CORE
+        atomic_write_text(method_core_path, method_core_content)
     academic_content = (skill_dir / "academic.md").read_text(encoding="utf-8")
     persona_content = (skill_dir / "persona.md").read_text(encoding="utf-8")
     playbook_path = skill_dir / "playbook.md"
     identity = build_identity(meta)
     mode = normalize_mode(meta.get("working_mode"))
     mode_label = MODE_LABELS[mode]
-    playbook_content = (
-        playbook_path.read_text(encoding="utf-8")
-        if playbook_path.exists()
-        else DEFAULT_PLAYBOOK.format(mode_label=mode_label)
-    )
+    mode_changed = mode != previous_mode
+    if playbook_path.exists():
+        playbook_content = playbook_path.read_text(encoding="utf-8")
+    else:
+        playbook_content = (
+            DEFAULT_PLAYBOOK.format(mode_label=mode_label) if templates_enabled else PLACEHOLDER_PLAYBOOK
+        )
+        atomic_write_text(playbook_path, playbook_content)
 
     template_setting_changed = (
         use_template_methodology is not None or strategy_changed or not had_template_setting
     )
-    if template_setting_changed:
-        if bool(meta.get("use_template_methodology", True)):
+    if template_setting_changed or mode_changed:
+        if templates_enabled:
             if method_core_content == PLACEHOLDER_METHOD_CORE:
                 method_core_content = DEFAULT_METHOD_CORE
                 atomic_write_text(method_core_path, method_core_content)
-            if playbook_content == PLACEHOLDER_PLAYBOOK:
-                playbook_content = DEFAULT_PLAYBOOK.format(mode_label=mode_label)
-                atomic_write_text(playbook_path, playbook_content)
+            # The template playbook embeds the working mode, so a mode change must
+            # rewrite it; user-edited playbooks stay untouched.
+            if playbook_content == PLACEHOLDER_PLAYBOOK or _is_template_playbook(playbook_content):
+                refreshed_playbook = DEFAULT_PLAYBOOK.format(mode_label=mode_label)
+                if playbook_content != refreshed_playbook:
+                    playbook_content = refreshed_playbook
+                    atomic_write_text(playbook_path, playbook_content)
         else:
             if method_core_content == DEFAULT_METHOD_CORE:
                 method_core_content = PLACEHOLDER_METHOD_CORE
