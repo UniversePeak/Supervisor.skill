@@ -288,11 +288,15 @@ def create_skill(
     return skill_dir
 
 
-def _next_version(current_version: str) -> str:
-    m = re.match(r"v(\d+)", current_version)
-    if not m:
-        return "v2"
-    return f"v{int(m.group(1)) + 1}"
+def _next_version(current_version: str, skill_dir: Path) -> str:
+    versions = [current_version]
+    versions.extend(path.name for path in (skill_dir / "versions").iterdir() if path.is_dir())
+    numbers = []
+    for version in versions:
+        m = re.match(r"v(\d+)", version)
+        if m:
+            numbers.append(int(m.group(1)))
+    return f"v{max(numbers, default=1) + 1}"
 
 
 def _backup_current(skill_dir: Path, version: str) -> Path:
@@ -451,7 +455,7 @@ def update_skill(
     )
     atomic_write_text(skill_dir / "SKILL.md", regenerated)
 
-    new_version = _next_version(current_version)
+    new_version = _next_version(current_version, skill_dir)
     meta["version"] = new_version
     meta["updated_at"] = now_iso()
     meta["schema_version"] = 2

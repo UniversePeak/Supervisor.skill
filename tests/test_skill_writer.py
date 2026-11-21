@@ -11,10 +11,12 @@ from tools.skill_writer import (
     DEFAULT_PLAYBOOK,
     PLACEHOLDER_METHOD_CORE,
     PLACEHOLDER_PLAYBOOK,
+    _next_version,
     create_skill,
     update_skill,
 )
 from tools.validate_skill import parse_frontmatter, validate_skill
+from tools.version_manager import rollback
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +56,50 @@ class SkillWriterTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 self.create_sample(Path(temp_dir))
             self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_update_after_rollback_advances_past_existing_snapshots(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            update_skill(skill_dir, persona_patch="q1")
+            q1_state = (skill_dir / "persona.md").read_text(encoding="utf-8")
+            update_skill(skill_dir, persona_patch="q2")
+            rollback(skill_dir, "v1")
+
+            update_skill(skill_dir, persona_patch="q3")
+
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v3")
+            self.assertEqual((skill_dir / "versions/v2/persona.md").read_text(encoding="utf-8"),
+                             q1_state)
+            rollback(skill_dir, "v2")
+            self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"), q1_state)
+
+    def test_next_version_uses_numeric_prefixes_from_metadata_and_snapshot_directories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            for name in ("v2", "v10_restored", "v9_20261122120000", "before_rollback_20261122120000"):
+                (skill_dir / "versions" / name).mkdir()
+            (skill_dir / "versions/v99").write_text("not a snapshot directory", encoding="utf-8")
+
+            for current, expected in (("v1_restored", "v11"), ("v12_restored", "v13")):
+                with self.subTest(current=current):
+                    self.assertEqual(_next_version(current, skill_dir), expected)
+
+    def test_next_update_snapshots_post_rollback_content_under_new_label(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            update_skill(skill_dir, persona_patch="q1")
+            update_skill(skill_dir, persona_patch="q2")
+            rollback(skill_dir, "v1")
+            update_skill(skill_dir, persona_patch="q3")
+            q3_state = (skill_dir / "persona.md").read_text(encoding="utf-8")
+
+            self.assertEqual(update_skill(skill_dir, persona_patch="q4"), "v4")
+
+            self.assertEqual((skill_dir / "versions/v3/persona.md").read_text(encoding="utf-8"),
+                             q3_state)
+            rollback(skill_dir, "v3")
+            self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"), q3_state)
 
     def test_template_settings_control_missing_content(self):
         cases = [
