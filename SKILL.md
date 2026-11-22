@@ -150,3 +150,5 @@ Use the bundled scripts with a validated slug:
 ```
 
 Before rollback, cleanup, or deletion, resolve and show the exact target directory. Require confirmation for deletion and explain recoverability.
+
+Every successful update takes the next unused `vN` label. A rollback keeps the highest label already issued in `meta.json`, so the label never comes back attached to different content.

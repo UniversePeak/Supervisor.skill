@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -22,6 +23,12 @@ def validate_version(value: str) -> str:
     if not VERSION_RE.fullmatch(value or ""):
         raise ValueError("版本名只能包含字母、数字、点、下划线和连字符")
     return value
+
+
+def version_number(label: str) -> Optional[int]:
+    """Return the numeric part of a vN label, or None when the label carries none."""
+    match = re.match(r"v(\d+)", str(label or ""))
+    return int(match.group(1)) if match else None
 
 
 def ensure_within(base_dir: Path, candidate: Path) -> Path:

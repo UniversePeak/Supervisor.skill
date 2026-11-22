@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from .path_safety import atomic_write_text, safe_child, validate_slug, validate_version
+    from .path_safety import atomic_write_text, safe_child, validate_slug, validate_version, version_number
 except ImportError:
-    from path_safety import atomic_write_text, safe_child, validate_slug, validate_version
+    from path_safety import atomic_write_text, safe_child, validate_slug, validate_version, version_number
 
 
 CORE_FILES = ("SKILL.md", "method_core.md", "academic.md", "persona.md", "playbook.md", "meta.json")
@@ -282,21 +282,18 @@ def create_skill(
     meta.setdefault("created_at", now_iso())
     meta["updated_at"] = now_iso()
     meta["version"] = "v1"
+    meta["version_ceiling"] = "v1"
 
     atomic_write_text(skill_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2))
 
     return skill_dir
 
 
-def _next_version(current_version: str, skill_dir: Path) -> str:
-    versions = [current_version]
+def _next_version(current_version: str, skill_dir: Path, ceiling: Optional[str] = None) -> str:
+    versions = [current_version, ceiling or ""]
     versions.extend(path.name for path in (skill_dir / "versions").iterdir() if path.is_dir())
-    numbers = []
-    for version in versions:
-        m = re.match(r"v(\d+)", version)
-        if m:
-            numbers.append(int(m.group(1)))
-    return f"v{max(numbers, default=1) + 1}"
+    numbers = [version_number(version) for version in versions]
+    return f"v{max((n for n in numbers if n is not None), default=1) + 1}"
 
 
 def _backup_current(skill_dir: Path, version: str) -> Path:
@@ -455,8 +452,9 @@ def update_skill(
     )
     atomic_write_text(skill_dir / "SKILL.md", regenerated)
 
-    new_version = _next_version(current_version, skill_dir)
+    new_version = _next_version(current_version, skill_dir, meta.get("version_ceiling"))
     meta["version"] = new_version
+    meta["version_ceiling"] = new_version
     meta["updated_at"] = now_iso()
     meta["schema_version"] = 2
     atomic_write_text(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
