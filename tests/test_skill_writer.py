@@ -68,7 +68,7 @@ class SkillWriterTests(unittest.TestCase):
             update_skill(skill_dir, persona_patch="q3")
 
             meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
-            self.assertEqual(meta["version"], "v3")
+            self.assertEqual(meta["version"], "v4")
             self.assertEqual((skill_dir / "versions/v2/persona.md").read_text(encoding="utf-8"),
                              q1_state)
             rollback(skill_dir, "v2")
@@ -94,12 +94,47 @@ class SkillWriterTests(unittest.TestCase):
             update_skill(skill_dir, persona_patch="q3")
             q3_state = (skill_dir / "persona.md").read_text(encoding="utf-8")
 
-            self.assertEqual(update_skill(skill_dir, persona_patch="q4"), "v4")
+            self.assertEqual(update_skill(skill_dir, persona_patch="q4"), "v5")
 
-            self.assertEqual((skill_dir / "versions/v3/persona.md").read_text(encoding="utf-8"),
+            self.assertEqual((skill_dir / "versions/v4/persona.md").read_text(encoding="utf-8"),
                              q3_state)
-            rollback(skill_dir, "v3")
+            rollback(skill_dir, "v4")
             self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"), q3_state)
+
+    def test_rollback_before_the_issued_label_was_snapshotted_retires_it(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            self.assertEqual(update_skill(skill_dir, persona_patch="q1"), "v2")
+
+            rollback(skill_dir, "v1")
+
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version_ceiling"], "v2")
+            self.assertEqual(update_skill(skill_dir, persona_patch="q2"), "v3")
+            snapshot_names = [path.name for path in (skill_dir / "versions").iterdir() if path.is_dir()]
+            self.assertNotIn("v2", snapshot_names)
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v3")
+            self.assertEqual(meta["version_ceiling"], "v3")
+
+    def test_legacy_skill_without_ceiling_starts_tracking_on_update(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            del meta["version_ceiling"]
+            atomic_write_text(skill_dir / "meta.json", json.dumps(meta, ensure_ascii=False, indent=2))
+
+            self.assertEqual(update_skill(skill_dir, persona_patch="q1"), "v2")
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version_ceiling"], "v2")
+
+    def test_next_version_prefers_the_recorded_ceiling_over_snapshot_names(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+
+            self.assertEqual(_next_version("v1_restored", skill_dir, "v7"), "v8")
+            self.assertEqual(_next_version("v1_restored", skill_dir, "v2"), "v3")
+            self.assertEqual(_next_version("v1_restored", skill_dir), "v2")
 
     def test_template_settings_control_missing_content(self):
         cases = [

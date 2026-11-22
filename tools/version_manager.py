@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from .path_safety import atomic_write_text, safe_child, validate_slug, validate_version
+    from .path_safety import atomic_write_text, safe_child, validate_slug, validate_version, version_number
 except ImportError:
-    from path_safety import atomic_write_text, safe_child, validate_slug, validate_version
+    from path_safety import atomic_write_text, safe_child, validate_slug, validate_version, version_number
 
 
 DEFAULT_MAX_KEEP = 15
@@ -91,6 +91,16 @@ def rollback(skill_dir: Path, target_version: str) -> None:
     if not target_dir.exists():
         raise FileNotFoundError(f"找不到版本：{target_version}")
 
+    # The label that was current before the rollback is about to disappear from
+    # meta.json, so remember it: a later update must not hand the same label to
+    # different content, even when no snapshot directory carries it.
+    previous_meta = load_meta(skill_dir)
+    issued = [
+        version_number(label)
+        for label in (previous_meta.get("version"), previous_meta.get("version_ceiling"), target_version)
+    ]
+    ceiling = max((number for number in issued if number is not None), default=None)
+
     # 回滚前自动备份当前状态
     backup(skill_dir, explicit_version=f"before_rollback_{datetime.now().strftime('%Y%m%d%H%M%S')}")
 
@@ -103,6 +113,8 @@ def rollback(skill_dir: Path, target_version: str) -> None:
 
     meta = load_meta(skill_dir)
     meta["version"] = f"{target_version}_restored"
+    if ceiling is not None:
+        meta["version_ceiling"] = f"v{ceiling}"
     meta["updated_at"] = utc_now()
     meta["rollback_from"] = target_version
     save_meta(skill_dir, meta)
