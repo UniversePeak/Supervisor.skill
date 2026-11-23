@@ -156,15 +156,13 @@ def slugify(text: str) -> str:
         parts = lazy_pinyin(text)
         s = "-".join(parts)
     except Exception:
-        s = text.lower()
-        s = s.replace("_", "-")
-        s = re.sub(r"\s+", "-", s)
-        s = re.sub(r"[^a-z0-9\-\u4e00-\u9fff]", "", s)
+        s = text
 
     s = s.lower().replace("_", "-")
     s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^a-z0-9-]", "", s)
     s = re.sub(r"-{2,}", "-", s).strip("-")
-    return s or "advisor"
+    return s[:64].strip("-")
 
 
 def build_identity(meta: dict) -> str:
@@ -599,7 +597,12 @@ def main() -> None:
         if args.name:
             meta["name"] = args.name
 
-        slug = validate_slug(args.slug) if args.slug else validate_slug(slugify(meta.get("name", "advisor")))
+        try:
+            slug = validate_slug(args.slug) if args.slug is not None else validate_slug(slugify(meta.get("name", "advisor")))
+        except ValueError as exc:
+            message = str(exc) if args.slug is not None else "导师名称无法生成可移植的目录名，请显式指定 --slug"
+            print(f"错误：{message}", file=sys.stderr)
+            sys.exit(1)
         method_core_content = read_optional_file(args.method_core)
         academic_content = read_optional_file(args.academic) or "# Academic Style\n\n[待补充]"
         persona_content = read_optional_file(args.persona) or "# Persona\n\n[待补充]"
