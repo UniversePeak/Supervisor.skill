@@ -4,8 +4,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from tools.path_safety import atomic_write_text
+from tools.path_safety import atomic_write_text, validate_slug
 from tools.skill_writer import (
     DEFAULT_METHOD_CORE,
     DEFAULT_PLAYBOOK,
@@ -13,6 +14,7 @@ from tools.skill_writer import (
     PLACEHOLDER_PLAYBOOK,
     _next_version,
     create_skill,
+    slugify,
     update_skill,
 )
 from tools.validate_skill import parse_frontmatter, validate_skill
@@ -20,6 +22,11 @@ from tools.version_manager import rollback
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+try:
+    from pypinyin import lazy_pinyin
+except ImportError:
+    lazy_pinyin = None
 
 
 class SkillWriterTests(unittest.TestCase):
@@ -33,6 +40,68 @@ class SkillWriterTests(unittest.TestCase):
             persona_content="# Persona\n\npersona sentinel",
             playbook_content="# Playbook\n\nplaybook sentinel",
         )
+
+    def test_slugify_ascii_punctuation_with_and_without_pypinyin(self):
+        slug = slugify("Dr. Wang (Advisor)")
+        self.assertEqual(slug, "dr-wang-advisor")
+        self.assertEqual(validate_slug(slug), slug)
+        with patch.dict(sys.modules, {"pypinyin": None}):
+            slug = slugify("Dr. Wang (Advisor)")
+            self.assertEqual(slug, "dr-wang-advisor")
+            self.assertEqual(validate_slug(slug), slug)
+
+    @unittest.skipUnless(lazy_pinyin is not None, "pypinyin is not installed")
+    def test_slugify_chinese_punctuation(self):
+        for name, expected in (("阿卜杜拉·买买提", "a-bo-du-la-mai-mai-ti"),
+                               ("王教授（博导）", "wang-jiao-shou-bo-dao")):
+            with self.subTest(name=name):
+                slug = slugify(name)
+                self.assertEqual(slug, expected)
+                self.assertEqual(validate_slug(slug), slug)
+                self.assertNotEqual(slug, "a-bo-du-la-·-mai-mai-ti")
+
+    def test_slugify_truncates_long_ascii_name_without_edge_dashes(self):
+        slug = slugify("-" + "A" * 63 + "_ Advisor " * 10)
+        self.assertEqual(slug, "a" * 63)
+        self.assertLessEqual(len(slug), 64)
+        self.assertFalse(slug.startswith("-") or slug.endswith("-"))
+        self.assertEqual(validate_slug(slug), slug)
+
+    def test_slugify_empty_and_unportable_names(self):
+        self.assertEqual(slugify(""), "advisor")
+        self.assertEqual(slugify("   "), "advisor")
+        self.assertEqual(slugify("!!!###"), "")
+        with patch.dict(sys.modules, {"pypinyin": None}):
+            self.assertEqual(slugify("张伟"), "")
+            self.assertEqual(slugify(" _Dr.__ Wang_ "), "dr-wang")
+
+    def test_cli_create_unportable_name_requests_explicit_slug(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                "--action", "create", "--base-dir", temp_dir, "--name", "!!!###"],
+                capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("--slug", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_create_invalid_explicit_slug_reports_constraint(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for slug in ("Invalid_Slug", ""):
+                with self.subTest(slug=slug):
+                    result = subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                        "--action", "create", "--base-dir", temp_dir,
+                        "--name", "Advisor", "--slug", slug],
+                        capture_output=True, text=True, encoding="utf-8")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("slug 必须为 1-64", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_create_explicit_slug_overrides_unportable_name(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                "--action", "create", "--base-dir", temp_dir,
+                "--name", "!!!###", "--slug", "advisor-a"], check=True, capture_output=True)
+            validate_skill(Path(temp_dir) / "advisor-a", require_folder_match=True)
 
     def test_generated_skill_uses_portable_frontmatter_and_thin_router(self):
         with tempfile.TemporaryDirectory() as temp_dir:
