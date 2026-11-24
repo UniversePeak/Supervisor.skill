@@ -22,7 +22,12 @@ except ImportError:
 TEXT_EXTS = {".txt", ".md", ".log", ".yaml", ".yml"}
 ALLOWED_EXTS = TEXT_EXTS | {".csv", ".json"}
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+BEGIN_MARKER = "===== BEGIN UNTRUSTED MATERIAL ====="
 END_MARKER = "===== END UNTRUSTED MATERIAL ====="
+MARKER_ESCAPES = (
+    (BEGIN_MARKER, "[ESCAPED BEGIN MATERIAL MARKER]"),
+    (END_MARKER, "[ESCAPED END MATERIAL MARKER]"),
+)
 
 INSTRUCTION_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -75,6 +80,13 @@ def detect_instruction_like_lines(content: str) -> List[int]:
     return flagged
 
 
+def escape_markers(content: str) -> str:
+    """Neutralize block delimiters so material cannot forge its own boundary."""
+    for marker, replacement in MARKER_ESCAPES:
+        content = content.replace(marker, replacement)
+    return content
+
+
 def normalize_one(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
     path = path.expanduser()
     if path.is_symlink():
@@ -92,10 +104,10 @@ def normalize_one(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
         content = decoded.strip()
 
     flagged = detect_instruction_like_lines(content)
-    escaped_content = content.replace(END_MARKER, "[ESCAPED END MATERIAL MARKER]")
+    escaped_content = escape_markers(content)
     flagged_text = ",".join(str(line) for line in flagged[:50]) or "none"
     return (
-        "===== BEGIN UNTRUSTED MATERIAL =====\n"
+        f"{BEGIN_MARKER}\n"
         f"source_path: {path.resolve()}\n"
         f"sha256: {digest}\n"
         f"media_type: {ext}\n"
