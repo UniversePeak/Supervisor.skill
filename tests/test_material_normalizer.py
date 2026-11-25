@@ -1,8 +1,14 @@
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools.material_normalizer import normalize_one
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class MaterialNormalizerTests(unittest.TestCase):
@@ -55,6 +61,46 @@ class MaterialNormalizerTests(unittest.TestCase):
             self.assertEqual(output.count("END UNTRUSTED MATERIAL"), 1)
             self.assertIn("[ESCAPED BEGIN MATERIAL MARKER]", output)
             self.assertIn("[ESCAPED END MATERIAL MARKER]", output)
+
+    def test_rejects_oversized_file_before_reading_it(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "huge.log"
+            path.write_bytes(b"x" * 32)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("read before size check")):
+                with self.assertRaisesRegex(ValueError, "大小限制"):
+                    normalize_one(path, max_bytes=16)
+
+    def test_csv_field_limit_rejects_only_the_offending_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            chat = root / "chat.csv"
+            chat.write_text('name,note\nA,"' + "x" * 200000 + '"\n', encoding="utf-8")
+            notes = root / "meeting.md"
+            notes.write_text("组会记录：老师说实验太少。", encoding="utf-8")
+            output_path = root / "normalized.txt"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools" / "material_normalizer.py"),
+                    "--inputs",
+                    str(chat),
+                    str(notes),
+                    "--output",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            normalized = output_path.read_text(encoding="utf-8")
+            self.assertIn("files_processed: 1", normalized)
+            self.assertIn("files_rejected: 1", normalized)
+            self.assertIn("CSV 解析失败", normalized)
+            self.assertIn("组会记录", normalized)
 
 
 if __name__ == "__main__":

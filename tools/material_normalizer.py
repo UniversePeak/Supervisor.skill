@@ -47,9 +47,11 @@ INSTRUCTION_PATTERNS = [
 
 
 def read_decoded(path: Path, max_bytes: int) -> Tuple[str, int, str]:
-    raw = path.read_bytes()
-    if len(raw) > max_bytes:
+    # Check the size before reading: the documented per-file limit must bound
+    # memory use, not just reject the file after it has been loaded.
+    if path.stat().st_size > max_bytes:
         raise ValueError(f"文件超过大小限制 {max_bytes} bytes：{path}")
+    raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     try:
         return raw.decode("utf-8-sig"), 0, digest
@@ -97,7 +99,12 @@ def normalize_one(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
 
     decoded, replacement_count, digest = read_decoded(path, max_bytes)
     if ext == ".csv":
-        content = render_csv(decoded)
+        try:
+            content = render_csv(decoded)
+        except csv.Error as exc:
+            # A single malformed or oversized field must only reject this file;
+            # letting csv.Error escape would abort every other material in the run.
+            raise ValueError(f"CSV 解析失败 {path}: {exc}") from exc
     elif ext == ".json":
         content = render_json(decoded)
     else:
