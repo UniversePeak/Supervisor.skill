@@ -437,6 +437,86 @@ class SkillWriterTests(unittest.TestCase):
             self.assertIn("`disabled`", result.stdout)
             self.assertEqual(list((skill_dir / "versions").iterdir()), [])
 
+    def test_partial_correction_is_rejected_without_touching_the_skill(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+            before = {
+                path.name: path.read_bytes()
+                for path in skill_dir.iterdir()
+                if path.is_file()
+            }
+
+            for kwargs in ({"correction_line": "- [组会] 不应该：x；应该：y"},
+                           {"correction_target": "academic"}):
+                with self.subTest(kwargs=kwargs):
+                    with self.assertRaisesRegex(ValueError, "必须同时提供"):
+                        update_skill(skill_dir, **kwargs)
+
+            after = {
+                path.name: path.read_bytes()
+                for path in skill_dir.iterdir()
+                if path.is_file()
+            }
+            self.assertEqual(before, after)
+            self.assertEqual(list((skill_dir / "versions").iterdir()), [])
+
+    def test_unknown_correction_target_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+
+            with self.assertRaisesRegex(ValueError, "不支持的纠偏目标"):
+                update_skill(skill_dir, correction_target="voice", correction_line="- x")
+
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v1")
+            self.assertEqual(meta["corrections_count"], 0)
+            self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"),
+                             "# Persona\n\npersona sentinel")
+
+    def test_correction_lands_in_the_named_file_and_is_counted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_dir = self.create_sample(Path(temp_dir))
+
+            version = update_skill(skill_dir, correction_target="academic",
+                                   correction_line="- [组会] 不应该：直接下结论；应该：先问证据")
+            self.assertEqual(version, "v2")
+            academic = (skill_dir / "academic.md").read_text(encoding="utf-8")
+            self.assertIn("academic sentinel", academic)
+            self.assertEqual(academic.count("## Correction 记录"), 1)
+            self.assertTrue(academic.rstrip().splitlines()[-1].startswith("- [组会]"))
+            self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"),
+                             "# Persona\n\npersona sentinel")
+
+            update_skill(skill_dir, correction_target="academic",
+                         correction_line="- [改稿] 不应该：a；应该：b")
+            academic = (skill_dir / "academic.md").read_text(encoding="utf-8")
+            self.assertEqual(academic.count("## Correction 记录"), 1)
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["corrections_count"], 2)
+
+    def test_cli_update_reports_invalid_input_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir) / "advisors"
+            skill_dir = self.create_sample(base_dir)
+            cases = (
+                ("--slug", "advisor-a", "--correction-line", "- [组会] 不应该：x；应该：y"),
+                ("--slug", "../escape"),
+            )
+
+            for extra in cases:
+                with self.subTest(extra=extra):
+                    result = subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                        "--action", "update", "--base-dir", str(base_dir), *extra],
+                        capture_output=True, text=True, encoding="utf-8")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertTrue(result.stderr.startswith("错误："), result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertNotIn("OK:", result.stdout)
+
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v1")
+            self.assertEqual(list((skill_dir / "versions").iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()
