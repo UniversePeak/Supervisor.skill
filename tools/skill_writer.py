@@ -29,6 +29,14 @@ except ImportError:
 
 CORE_FILES = ("SKILL.md", "method_core.md", "academic.md", "persona.md", "playbook.md", "meta.json")
 
+CORRECTION_TARGETS = {
+    "method_core": "method_core.md",
+    "academic": "academic.md",
+    "persona": "persona.md",
+    "playbook": "playbook.md",
+}
+
+
 
 SKILL_MD_TEMPLATE = """\
 ---
@@ -329,6 +337,16 @@ def update_skill(
         raise FileNotFoundError(f"meta.json 不存在：{meta_path}")
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    # A half-specified correction would otherwise bump the version and report success
+    # while writing nothing, and an unrecognized target would land in persona.md.
+    if bool(correction_target) != bool(correction_line):
+        raise ValueError(
+            "correction_target 与 correction_line 必须同时提供，否则纠偏记录会被静默丢弃"
+        )
+    if correction_target is not None and correction_target not in CORRECTION_TARGETS:
+        raise ValueError(
+            f"不支持的纠偏目标：{correction_target}（可选：{', '.join(sorted(CORRECTION_TARGETS))}）"
+        )
     current_version = meta.get("version", "v1")
     previous_strategy = normalize_distill_strategy(meta.get("distill_strategy"))
     previous_mode = normalize_mode(meta.get("working_mode"))
@@ -356,13 +374,7 @@ def update_skill(
         atomic_write_text(playbook_path, old.rstrip() + "\n\n" + playbook_patch.strip() + "\n")
 
     if correction_target and correction_line:
-        target_map = {
-            "method_core": "method_core.md",
-            "academic": "academic.md",
-            "persona": "persona.md",
-            "playbook": "playbook.md",
-        }
-        target_path = skill_dir / target_map.get(correction_target, "persona.md")
+        target_path = skill_dir / CORRECTION_TARGETS[correction_target]
         old = target_path.read_text(encoding="utf-8") if target_path.exists() else ""
         section = "## Correction 记录"
         if section not in old:
@@ -638,7 +650,11 @@ def main() -> None:
         if not args.slug:
             print("错误：update 需要 --slug", file=sys.stderr)
             sys.exit(1)
-        skill_dir = safe_child(base_dir, args.slug)
+        try:
+            skill_dir = safe_child(base_dir, args.slug)
+        except ValueError as exc:
+            print(f"错误：{exc}", file=sys.stderr)
+            sys.exit(1)
         if not skill_dir.exists():
             print(f"错误：未找到目录 {skill_dir}", file=sys.stderr)
             sys.exit(1)
@@ -663,16 +679,24 @@ def main() -> None:
         }
         if args.dry_run:
             before = snapshot_core_files(skill_dir)
-            with tempfile.TemporaryDirectory(prefix="supervisor-preview-") as temp_dir:
-                preview_dir = Path(temp_dir) / skill_dir.name
-                shutil.copytree(skill_dir, preview_dir)
-                new_version = update_skill(skill_dir=preview_dir, **update_kwargs)
-                after = snapshot_core_files(preview_dir)
+            try:
+                with tempfile.TemporaryDirectory(prefix="supervisor-preview-") as temp_dir:
+                    preview_dir = Path(temp_dir) / skill_dir.name
+                    shutil.copytree(skill_dir, preview_dir)
+                    new_version = update_skill(skill_dir=preview_dir, **update_kwargs)
+                    after = snapshot_core_files(preview_dir)
+            except ValueError as exc:
+                print(f"错误：{exc}", file=sys.stderr)
+                sys.exit(1)
             print_diff(before, after)
             print(f"\nDRY RUN: 原目录未修改；确认后将更新到 {new_version}")
             return
 
-        new_version = update_skill(skill_dir=skill_dir, **update_kwargs)
+        try:
+            new_version = update_skill(skill_dir=skill_dir, **update_kwargs)
+        except ValueError as exc:
+            print(f"错误：{exc}", file=sys.stderr)
+            sys.exit(1)
         print(f"OK: 已更新到 {new_version}：{skill_dir}")
 
 
