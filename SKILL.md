@@ -121,6 +121,8 @@ If validation fails, fix it before reporting success.
 7. Apply only the confirmed changes without `--dry-run`; the writer creates a recoverable backup automatically.
 8. Regenerate and validate `SKILL.md` before reporting success.
 
+Pass confirmed changes as incremental flags (`--academic-patch`, `--persona-patch`, `--method-core-patch`, `--playbook-patch`). The full-content flags used for creation (`--academic`, `--persona`, `--method-core`, `--playbook`) are rejected on update, and so is an update with nothing to apply, so a reported success never means an empty version.
+
 Changing `distill_strategy` on update applies the same default as creation: `strict_distill` disables template methodology unless the template setting is passed explicitly; `hybrid_distill` and `template_first` enable it. Untouched template files become labeled gaps when templates are disabled, while edited content is preserved.
 
 Never let a single correction silently rewrite unrelated rules. Preserve conflicting evidence as disputed until the user resolves it.
