@@ -517,6 +517,49 @@ class SkillWriterTests(unittest.TestCase):
             self.assertEqual(meta["version"], "v1")
             self.assertEqual(list((skill_dir / "versions").iterdir()), [])
 
+    def test_cli_update_rejects_create_only_content_flags(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir) / "advisors"
+            skill_dir = self.create_sample(base_dir)
+            content = Path(temp_dir) / "replacement.md"
+            content.write_text("# Replacement\n\nnew sentinel", encoding="utf-8")
+
+            for flag in ("--academic", "--persona", "--method-core", "--playbook"):
+                with self.subTest(flag=flag):
+                    result = subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                        "--action", "update", "--base-dir", str(base_dir),
+                        "--slug", "advisor-a", flag, str(content)],
+                        capture_output=True, text=True, encoding="utf-8")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertTrue(result.stderr.startswith("错误："), result.stderr)
+                    self.assertIn(f"{flag}-patch", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertNotIn("OK:", result.stdout)
+
+            self.assertEqual((skill_dir / "academic.md").read_text(encoding="utf-8"),
+                             "# Academic\n\nacademic sentinel")
+            self.assertEqual((skill_dir / "persona.md").read_text(encoding="utf-8"),
+                             "# Persona\n\npersona sentinel")
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v1")
+            self.assertEqual(list((skill_dir / "versions").iterdir()), [])
+
+    def test_cli_update_requires_something_to_apply(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir) / "advisors"
+            skill_dir = self.create_sample(base_dir)
+
+            result = subprocess.run([sys.executable, str(REPO_ROOT / "tools/skill_writer.py"),
+                "--action", "update", "--base-dir", str(base_dir), "--slug", "advisor-a"],
+                capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(result.returncode, 1)
+            self.assertTrue(result.stderr.startswith("错误："), result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertNotIn("OK:", result.stdout)
+            meta = json.loads((skill_dir / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta["version"], "v1")
+            self.assertEqual(list((skill_dir / "versions").iterdir()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

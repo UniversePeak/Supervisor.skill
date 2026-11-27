@@ -659,6 +659,24 @@ def main() -> None:
             print(f"错误：未找到目录 {skill_dir}", file=sys.stderr)
             sys.exit(1)
 
+        # This parser also accepts the create-only content flags. Applying them here
+        # would write nothing while still reporting a new version, so reject them
+        # instead of silently dropping the user's content.
+        content_flags = {
+            "--academic": args.academic,
+            "--persona": args.persona,
+            "--method-core": args.method_core,
+            "--playbook": args.playbook,
+        }
+        supplied = [flag for flag, value in content_flags.items() if value]
+        if supplied:
+            print(
+                f"错误：update 不接受 {', '.join(supplied)}（完整内容只用于 create）；"
+                "请改用 --academic-patch / --persona-patch / --method-core-patch / --playbook-patch",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         method_core_patch = read_optional_file(args.method_core_patch)
         academic_patch = read_optional_file(args.academic_patch)
         persona_patch = read_optional_file(args.persona_patch)
@@ -677,6 +695,9 @@ def main() -> None:
             "correction_target": args.correction_target,
             "correction_line": args.correction_line,
         }
+        if all(value is None for value in update_kwargs.values()):
+            print("错误：没有可应用的更新内容，未创建新版本", file=sys.stderr)
+            sys.exit(1)
         if args.dry_run:
             before = snapshot_core_files(skill_dir)
             try:
